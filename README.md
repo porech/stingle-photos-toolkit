@@ -1,0 +1,68 @@
+# stingle-photos-toolkit
+
+A Python library to interact with [Stingle Photos](https://stingle.org/) database and data files. It supports connecting to the MySQL database, either live or a dump restore, and to the file system or a copy of it, either local or S3.
+
+Please note that this library does not interact with the Stingle API, but directly with files and database, so it's suitable only for self-hosted setups.
+
+## Project status
+
+This is a work in progress: documentation and PyPi distribution is still missing. However, it works.
+
+## Installing
+
+You need uv to build the wheel:
+
+```
+uv build
+```
+
+Then, you can install the wheel in the virtualenv you prefer (no uv required) with something like:
+
+```
+pip install dist/*.whl
+```
+
+## Using
+
+This is a fairly complete example of everything the library currently supports:
+
+```python
+from StinglePhotosToolkit import Client, DataFolderType
+
+# Initialize the client
+client = Client(
+    mysql_host="localhost",
+    mysql_database="stingle_api",
+    mysql_username="user",
+    mysql_password="mypassword",
+    data_folder_type=DataFolderType.S3, # If DataFolderType.Local you need to pass the data_folder_path argument instead of the next 4 ones
+    data_folder_bucket="my-bucket",
+    data_folder_region="eu-central-1",
+    data_folder_access_key="MYACCESSKEY",
+    data_folder_secret_key="mySecr3tKey",
+    stingle_username="mymail@example.org",
+    stingle_key_mnemonic="my key recovery mnemonic words", # Instead, you can pass the stingle_password argument if you backed up the key to the server: the key will be retrieved and decrypted from the database
+)
+
+# Opens the MySQL connection and gets some data about the user (id, key if needed)
+client.open()
+
+# Get a list of albums available for the users (id and name are returned)
+albums = client.get_albums()
+
+# Get a list of files from the first album, get 3 of them
+files = client.list_files(album_id=albums[0].id, limit=3)
+
+# Get a list of files that are not in an album, skip the first 6 and get 3 of them
+files = client.list_files(skip=6, limit=3)
+
+# Decrypt the files and save them with their original filename
+for f in files:
+    with open(f.file_name, "wb") as out:
+        client.write_file(f, out)
+client.close()
+```
+
+## License
+
+This is released as GNU AFFERO GENERAL PUBLIC LICENSE, the same license of the Stingle API code.
