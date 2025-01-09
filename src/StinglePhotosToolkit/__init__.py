@@ -1,2 +1,2 @@
-from .client import Client, DataFolderType
-from .model import Album, File, FileType
+from .client import Client
+from .model import DataFolderType, Album, File, FileType, Header

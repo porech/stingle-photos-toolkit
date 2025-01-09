@@ -20,7 +20,7 @@ from libnacl import (
     crypto_kdf_derive_from_key,
 )
 from nacl.pwhash.argon2id import OPSLIMIT_MODERATE, MEMLIMIT_MODERATE, kdf, SALTBYTES
-from .model import DataFolderType, Album, File, FileType
+from .model import DataFolderType, Album, File, FileType, Header
 from .mnemonic import mnemonic_to_keys
 
 
@@ -62,7 +62,7 @@ class Client:
         self.__validate()
         self.__make_s3_client()
 
-    def __validate(self):
+    def __validate(self) -> None:
         if self.__data_folder_type == DataFolderType.S3:
             if self.__data_folder_bucket is None:
                 raise ValueError("Bucket is required for S3 data folder")
@@ -86,7 +86,7 @@ class Client:
         if self.__stingle_password is None and self.__stingle_key_mnemonic is None:
             raise ValueError("Password or secret key is required for Stingle API")
 
-    def __make_s3_client(self):
+    def __make_s3_client(self) -> None:
         if self.__data_folder_type != DataFolderType.S3:
             return
         self.s3_client = boto3.client(
@@ -111,7 +111,7 @@ class Client:
         self.connection.close()
         self.__opened = False
 
-    def __get_user(self):
+    def __get_user(self) -> None:
         cursor = self.connection.cursor()
         cursor.execute(
             "SELECT id FROM wum_users WHERE login = %s", (self.__stingle_username,)
@@ -123,7 +123,7 @@ class Client:
         self.__user_id = row[0]
         self.__get_user_key()
 
-    def __get_user_key(self):
+    def __get_user_key(self) -> None:
         if self.__stingle_key_mnemonic is not None:
             self.__user_key = mnemonic_to_keys(self.__stingle_key_mnemonic)
             return
@@ -193,7 +193,7 @@ class Client:
         )
         return public_key, private_key
 
-    def __check_opened(self):
+    def __check_opened(self) -> None:
         if not self.__opened:
             raise ValueError("Client is not opened, please call open() first")
 
@@ -244,23 +244,27 @@ class Client:
         finally:
             cursor.close()
 
-    def __parse_header(
-        self,
-        data: io.BufferedReader,
-        public_key: Optional[bytes] = None,
-        private_key: Optional[bytes] = None,
-    ):
-        if public_key is None:
-            public_key = self.__user_key[0]
-        if private_key is None:
-            private_key = self.__user_key[1]
+    def __get_file_version(self, data: io.BufferedReader) -> int:
         magic_bytes = data.read(2)
         if magic_bytes != b"SP":
             raise ValueError("unrecognized file")
         file_version = int.from_bytes(data.read(1), "big")
         if file_version != 1:
             raise ValueError(f"unsupported file version: {file_version}")
-        file_id = data.read(32)
+        return file_version
+
+    def __parse_header(
+        self,
+        data: io.BufferedReader,
+        public_key: Optional[bytes] = None,
+        private_key: Optional[bytes] = None,
+    ) -> Header:
+        if public_key is None:
+            public_key = self.__user_key[0]
+        if private_key is None:
+            private_key = self.__user_key[1]
+        file_version = self.__get_file_version(data)
+        file_id = self.__encode_url_base64(data.read(32))
         header_size = int.from_bytes(data.read(4), "big")
         enc_header_content = data.read(header_size)
         header_content = io.BytesIO(
@@ -274,7 +278,7 @@ class Client:
         file_name_size = int.from_bytes(header_content.read(4), "big")
         file_name = header_content.read(file_name_size).decode("utf-8")
         video_duration = int.from_bytes(header_content.read(4), "big")
-        return (
+        return Header(
             file_version,
             file_id,
             header_size,
@@ -287,22 +291,17 @@ class Client:
             video_duration,
         )
 
-    def __skip_header(self, data: io.BufferedReader):
-        magic_bytes = data.read(2)
-        if magic_bytes != b"SP":
-            raise ValueError("unrecognized file")
-        file_version = int.from_bytes(data.read(1), "big")
-        if file_version != 1:
-            raise ValueError(f"unsupported file version: {file_version}")
+    def __skip_header(self, data: io.BufferedReader) -> None:
+        _ = self.__get_file_version(data)
         _ = data.read(32)
         header_size = int.from_bytes(data.read(4), "big")
         _ = data.read(header_size)
 
-    def __decode_url_base64(self, data):
+    def __decode_url_base64(self, data) -> bytes:
         data += "=" * (len(data) % 4)
         return base64.urlsafe_b64decode(data)
 
-    def __encode_url_base64(self, data):
+    def __encode_url_base64(self, data) -> str:
         return base64.urlsafe_b64encode(data).decode("ascii").rstrip("=")
 
     def list_files(
@@ -338,13 +337,20 @@ class Client:
             files = []
             for row in cursor:
                 file, file_id, size, version, date_created, date_modified, headers = row
-                headers = self.__decode_url_base64(headers)
-                dec_headers = self.__parse_header(
-                    io.BytesIO(headers), public_key, private_key
+                splitted_headers = headers.split("*")
+                file_header = self.__parse_header(
+                    io.BytesIO(self.__decode_url_base64(splitted_headers[0])),
+                    public_key,
+                    private_key,
                 )
-                if dec_headers[0] != version:
-                    raise ValueError("File version mismatch")
-                if self.__encode_url_base64(dec_headers[1]) != file_id:
+                thumbnail_header = None
+                if len(splitted_headers) > 1:
+                    thumbnail_header = self.__parse_header(
+                        io.BytesIO(self.__decode_url_base64(splitted_headers[1])),
+                        public_key,
+                        private_key,
+                    )
+                if file_header.file_id != file_id:
                     raise ValueError("File ID mismatch")
                 files.append(
                     File(
@@ -354,7 +360,8 @@ class Client:
                         size,
                         datetime.fromtimestamp(date_created / 1000),
                         datetime.fromtimestamp(date_modified / 1000),
-                        *dec_headers[2:],
+                        file_header,
+                        thumbnail_header,
                     )
                 )
             return files
@@ -370,7 +377,9 @@ class Client:
         path = os.path.join(self.__data_folder_path, *path)
         return open(path, "rb")
 
-    def __decrypt_chunk(self, chunk_number: int, chunk_data: bytes, key: bytes):
+    def __decrypt_chunk(
+        self, chunk_number: int, chunk_data: bytes, key: bytes
+    ) -> bytes:
         if (
             len(chunk_data)
             < crypto_aead_xchacha20poly1305_ietf_NPUBBYTES
@@ -391,7 +400,7 @@ class Client:
         out: io.BufferedWriter,
         key: bytes,
         chunk_size: int,
-    ):
+    ) -> None:
         full_chunk_size = (
             crypto_aead_xchacha20poly1305_ietf_NPUBBYTES
             + chunk_size
@@ -410,9 +419,27 @@ class Client:
         path = ["uploads", "files", file.encrypted_file_name]
         fh = self.__open_file(path)
         self.__skip_header(fh)
-        self.__decrypt_data(fh, out, file.symmetric_key, file.chunk_size)
+        self.__decrypt_data(fh, out, file.header.symmetric_key, file.header.chunk_size)
 
     def get_file(self, file: File) -> bytes:
         out = io.BytesIO()
         self.write_file(file, out)
+        return out.getvalue()
+
+    def write_thumbnail(self, file: File, out: io.BufferedWriter) -> None:
+        if file.thumbnail_header is None:
+            raise ValueError("File has no thumbnail")
+        path = ["uploads", "thumbs", file.encrypted_file_name]
+        fh = self.__open_file(path)
+        self.__skip_header(fh)
+        self.__decrypt_data(
+            fh,
+            out,
+            file.thumbnail_header.symmetric_key,
+            file.thumbnail_header.chunk_size,
+        )
+
+    def get_thumbnail(self, file: File) -> bytes:
+        out = io.BytesIO()
+        self.write_thumbnail(file, out)
         return out.getvalue()

@@ -1,5 +1,6 @@
 from datetime import datetime
 from enum import IntEnum, StrEnum
+from typing import Optional
 
 
 class DataFolderType(StrEnum):
@@ -25,13 +26,9 @@ class FileType(IntEnum):
     Video = 3
 
 
-class File:
-    id: str
-    encrypted_file_name: str
-    version: int
-    size: int
-    date_created: datetime
-    date_modified: datetime
+class Header:
+    file_version: int
+    file_id: str
     header_size: int
     header_version: int
     chunk_size: int
@@ -43,12 +40,8 @@ class File:
 
     def __init__(
         self,
-        id: str,
-        encrypted_file_name: str,
-        version: int,
-        size: int,
-        date_created: datetime,
-        date_modified: datetime,
+        file_version: int,
+        file_id: str,
         header_size: int,
         header_version: int,
         chunk_size: int,
@@ -58,12 +51,8 @@ class File:
         file_name: str,
         video_duration: int,
     ):
-        self.id = id
-        self.encrypted_file_name = encrypted_file_name
-        self.version = version
-        self.size = size
-        self.date_created = date_created
-        self.date_modified = date_modified
+        self.file_version = file_version
+        self.file_id = file_id
         self.header_size = header_size
         self.header_version = header_version
         self.chunk_size = chunk_size
@@ -74,4 +63,38 @@ class File:
         self.video_duration = video_duration
 
     def __repr__(self):
-        return f"File(id={self.id}, encrypted_file_name={self.encrypted_file_name}, version={self.version}, size={self.size}, date_created={self.date_created}, date_modified={self.date_modified}, header_size={self.header_size}, header_version={self.header_version}, chunk_size={self.chunk_size}, data_size={self.data_size}, file_type={self.file_type.name}, file_name={self.file_name}, video_duration={self.video_duration})"
+        return f"Header(chunk_size={self.chunk_size}, data_size={self.data_size}, file_type={self.file_type.name}, file_name={self.file_name}, video_duration={self.video_duration})"
+
+
+class File:
+    id: str
+    encrypted_file_name: str
+    version: int
+    size: int
+    date_created: datetime
+    date_modified: datetime
+    header: Header
+    thumbnail_header: Optional[Header]
+
+    def __init__(
+        self,
+        id: str,
+        encrypted_file_name: str,
+        version: int,
+        size: int,
+        date_created: datetime,
+        date_modified: datetime,
+        header: Header,
+        thumbnail_header: Optional[Header] = None,
+    ):
+        self.id = id
+        self.encrypted_file_name = encrypted_file_name
+        self.version = version
+        self.size = size
+        self.date_created = date_created
+        self.date_modified = date_modified
+        self.header = header
+        self.thumbnail_header = thumbnail_header
+
+    def __repr__(self):
+        return f"File(id={self.id}, encrypted_file_name={self.encrypted_file_name}, version={self.version}, size={self.size}, date_created={self.date_created}, date_modified={self.date_modified}, file_type={self.header.file_type.name}, file_name={self.header.file_name}, video_duration={self.header.video_duration})"
