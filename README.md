@@ -10,24 +10,10 @@ This is a work in progress: documentation is still missing. However, it works. Y
 
 ## Installing
 
-The package is published on PyPi so you can install it with your preferred package manager, for example:
+The package is [published on PyPi](https://pypi.org/project/stingle-photos-toolkit/) so you can install it with your preferred package manager, for example:
 
 ```
 pip install stingle-photos-toolkit
-```
-
-## Building from source
-
-You need to have `uv` installed to build the wheel:
-
-```
-uv build
-```
-
-Then, you can install the wheel in the virtualenv you prefer (no uv required) with something like:
-
-```
-pip install dist/*.whl
 ```
 
 ## Using
@@ -77,6 +63,20 @@ for f in files:
 
 # Close the connection to MySQL
 client.close()
+```
+
+## Building from source
+
+You need to have `uv` installed to build the wheel:
+
+```
+uv build
+```
+
+Then, you can install the wheel in the virtualenv you prefer (no uv required) with something like:
+
+```
+pip install dist/*.whl
 ```
 
 ## License
