@@ -6,11 +6,19 @@ Please note that this library does not interact with the Stingle API, but direct
 
 ## Project status
 
-This is a work in progress: documentation and PyPi distribution is still missing. However, it works.
+This is a work in progress: documentation is still missing. However, it works. You can refer to the example below, it should be pretty clear how to use it.
 
 ## Installing
 
-You need uv to build the wheel:
+The package is published on PyPi so you can install it with your preferred package manager, for example:
+
+```
+pip install stingle-photos-toolkit
+```
+
+## Building from source
+
+You need to have `uv` installed to build the wheel:
 
 ```
 uv build
@@ -56,10 +64,14 @@ files = client.list_files(album_id=albums[0].id, limit=3)
 # Get a list of files that are not in an album, skip the first 6 and get 3 of them
 files = client.list_files(skip=6, limit=3)
 
-# Decrypt the files and save them with their original filename
 for f in files:
+    # Decrypt the file and save it with its original filename
     with open(f.file_name, "wb") as out:
         client.write_file(f, out)
+    # You can also get the file content as bytes
+    file_data = client.get_file(f)
+
+# Close the connection to MySQL
 client.close()
 ```
 

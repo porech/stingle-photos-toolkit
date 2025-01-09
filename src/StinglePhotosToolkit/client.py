@@ -96,7 +96,7 @@ class Client:
             aws_secret_access_key=self.__data_folder_secret_key,
         )
 
-    def open(self):
+    def open(self) -> None:
         self.connection = mysql.connector.connect(
             host=self.__mysql_host,
             port=self.__mysql_port,
@@ -107,7 +107,7 @@ class Client:
         self.__get_user()
         self.__opened = True
 
-    def close(self):
+    def close(self) -> None:
         self.connection.close()
         self.__opened = False
 
@@ -222,7 +222,7 @@ class Client:
         self.__album_keys[album_id] = (public_key, private_key)
         return public_key, private_key
 
-    def get_albums(self):
+    def get_albums(self) -> List[Album]:
         self.__check_opened()
         cursor = self.connection.cursor()
         cursor.execute(
@@ -305,7 +305,9 @@ class Client:
     def __encode_url_base64(self, data):
         return base64.urlsafe_b64encode(data).decode("ascii").rstrip("=")
 
-    def list_files(self, album_id: Optional[str] = None, skip: int = 0, limit: int = 0):
+    def list_files(
+        self, album_id: Optional[str] = None, skip: int = 0, limit: int = 0
+    ) -> List[File]:
         self.__check_opened()
         if album_id is None:
             public_key, private_key = self.__user_key
@@ -404,7 +406,7 @@ class Client:
             out.write(res)
             chunk_number += 1
 
-    def write_file(self, file: File, out: io.BufferedWriter):
+    def write_file(self, file: File, out: io.BufferedWriter) -> None:
         path = ["uploads", "files", file.encrypted_file_name]
         fh = self.__open_file(path)
         self.__skip_header(fh)
@@ -413,15 +415,4 @@ class Client:
     def get_file(self, file: File) -> bytes:
         out = io.BytesIO()
         self.write_file(file, out)
-        return out.getvalue()
-
-    def write_thumbnail(self, file: File, out: io.BufferedWriter) -> io.BufferedReader:
-        path = ["uploads", "thumbs", file.encrypted_file_name]
-        fh = self.__open_file(path)
-        self.__skip_header(fh)
-        self.__decrypt_data(fh, out, file.symmetric_key, file.chunk_size)
-
-    def get_thumbnail(self, file: File) -> bytes:
-        out = io.BytesIO()
-        self.write_thumbnail(file, out)
         return out.getvalue()
